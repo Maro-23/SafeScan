@@ -10,6 +10,9 @@ from email.message import EmailMessage
 import detection
 import threading
 import time
+from services.tracking import PeopleTracker
+from services.email import EmailService
+from services.stations import StationManager
 
 # Load video
 video_path = "sample_vid1.mp4"
@@ -54,13 +57,11 @@ last_people_boxes = []
 last_person_ids = []
 
 # Tracking history variables
-tracking_history = {}
+tracker = PeopleTracker()
 history_window = None
 history_table = None
 
 # Email init
-from services.email import EmailService
-# Initialize email service (put with other backend variables)
 email_service = EmailService(
     sender="marwanhatem1234@gmail.com",
     receiver="marwanhatemalt1234@gmail.com",
@@ -68,7 +69,6 @@ email_service = EmailService(
 )
 
 # Drawing variables
-from services.stations import StationManager
 station_manager = StationManager()
 rectangle_start = None
 settings_file = "settings.json"
@@ -149,60 +149,6 @@ def update_station_people_count():
         station_display.insert(tk.END, "Draw stations to begin tracking")
         station_display.config(state="disabled")
 
-def update_tracking_history(people_boxes, person_ids):
-    current_time = time.time()
-    active_ids = set(person_ids)
-    
-    # Initialize new tracks
-    for track_id in person_ids:
-        if track_id not in tracking_history:
-            tracking_history[track_id] = {
-                "first_seen": current_time,
-                "last_seen": current_time,
-                "total_active_time": 0,  # NEW: Track active duration
-                "station_history": [],
-                "current_station": None,
-                "last_update": current_time
-            }
-        else:
-            # Update last_seen for active tracks
-            tracking_history[track_id]["last_seen"] = current_time
-    
-    # Update station information for each track
-    for i, track_id in enumerate(person_ids):
-        if track_id in tracking_history:
-            x, y = people_boxes[i]
-            current_station = None
-            
-            # Check which station the person is in
-            for j, ((x1, y1), (x2, y2)) in enumerate(station_manager.rectangles):
-                if x1 <= x <= x2 and y1 <= y <= y2:
-                    current_station = station_manager.station_names[j]
-                    break
-            
-            # If station changed, update history
-            if tracking_history[track_id]["current_station"] != current_station:
-                if tracking_history[track_id]["current_station"] is not None:
-                    # Record time spent in previous station
-                    time_spent = current_time - tracking_history[track_id]["last_update"]
-                    tracking_history[track_id]["station_history"].append(
-                        (tracking_history[track_id]["current_station"], time_spent)
-                    )
-                tracking_history[track_id]["current_station"] = current_station
-                tracking_history[track_id]["last_update"] = current_time
-    
-    for track_id in active_ids:
-        if track_id in tracking_history:
-            elapsed = current_time - tracking_history[track_id]["last_update"]
-            tracking_history[track_id]["total_active_time"] += elapsed
-            tracking_history[track_id]["last_update"] = current_time
-    
-    # Clean up old tracks
-    old_tracks = [tid for tid, data in tracking_history.items() 
-                 if current_time - data["last_update"] > 300]  # 5 minutes
-    for tid in old_tracks:
-        del tracking_history[tid]
-
 def show_history_window():
     global history_window, history_table
     
@@ -237,32 +183,28 @@ def show_history_window():
 
 def update_history_table():
     if history_table:
-        # Clear existing data
-        for item in history_table.get_children():
-            history_table.delete(item)
-        
+        history_table.delete(*history_table.get_children())
         current_time = time.time()
         
-        # Add data for each tracked person
-        for track_id, data in tracking_history.items():
-            total_time = data["total_active_time"]
+        for track_id, data in tracker.history.items():
+            # Calculate CURRENT station time (not yet recorded in history)
+            current_station_time = 0
+            if data['current_station']:
+                current_station_time = current_time - data['last_update']
             
-            # Calculate time in current station
-            time_in_station = current_time - data["last_update"] if data["current_station"] else 0
+            # Sum all time spent in current + previous stations
+            total_station_time = sum(t for _, t in data['station_history']) + current_station_time
             
-            # Format station history
-            station_history_str = "\n".join(
-                [f"{station}: {time_spent:.1f}s" for station, time_spent in data["station_history"]]
-            )
+            # Ensure never exceeds total_time
+            display_station_time = min(total_station_time, data['total_time'])
             
-            # Add row to table
             history_table.insert("", "end", values=(
                 track_id,
-                f"{total_time:.1f}s",
-                data["current_station"] or "None",
-                f"{time_in_station:.1f}s" if data["current_station"] else "N/A",
+                f"{data['total_time']:.1f}s",
+                data['current_station'] or "None",
+                f"{display_station_time:.1f}s" if data['current_station'] else "N/A"
             ))
-
+            
 def send_alert_email():
     def _send_thread():
         try:
@@ -304,7 +246,12 @@ def update_frame():
             last_person_ids = person_ids
             
             # Update tracking history
-            update_tracking_history(last_people_boxes, last_person_ids)
+            tracker.update(
+                last_people_boxes,
+                last_person_ids,
+                station_manager.rectangles,
+                station_manager.station_names
+            )
         else:
             frame = last_detection_result if last_detection_result is not None else frame
 
