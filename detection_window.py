@@ -4,15 +4,11 @@ from tkinter import ttk
 from PIL import Image, ImageTk
 import os
 import json
-import smtplib
-import ssl
-from email.message import EmailMessage
 import detection
-import threading
-import time
 from services.tracking import PeopleTracker
 from services.email import EmailService
 from services.stations import StationManager
+from services.config import ConfigManager
 
 # Load video
 video_path = "sample_vid1.mp4"
@@ -45,11 +41,7 @@ root.minsize(window_width, window_height)  # Prevent window from shrinking
 
 # Backend variables
 font_style = ("Arial", 10)
-threshold = tk.IntVar(value=5)
 station_selection_enabled = tk.BooleanVar(value=False)
-people_detect = tk.BooleanVar(value=True)
-helmets_detect = tk.BooleanVar(value=True)
-vests_detect = tk.BooleanVar(value=True)
 frame_counter = 0
 last_detection_result = None
 last_person_count = 0
@@ -62,21 +54,26 @@ tracker = PeopleTracker()
 # Drawing variables
 station_manager = StationManager()
 rectangle_start = None
-settings_file = "settings.json"
+
+from services.config import ConfigManager
+config = ConfigManager()
+settings = config.load()
+
+# Initialize UI variables
+people_detect = tk.BooleanVar(value=settings["people"])
+helmets_detect = tk.BooleanVar(value=settings["helmets"])
+vests_detect = tk.BooleanVar(value=settings["vests"])
+threshold = tk.IntVar(value=settings["threshold"])
 
 # Function definitions
 
-def load_settings():
-    if os.path.exists(settings_file):
-        with open(settings_file, "r") as file:
-            data = json.load(file)
-            people_detect.set(data.get("people", True))
-            helmets_detect.set(data.get("helmets", True))
-            vests_detect.set(data.get("vests", True))
-
 def save_settings():
-    with open(settings_file, "w") as file:
-        json.dump({"people": people_detect.get(), "helmets": helmets_detect.get(), "vests": vests_detect.get()}, file)
+    config.save({
+        "people": people_detect.get(),
+        "helmets": helmets_detect.get(),
+        "vests": vests_detect.get(),
+        "threshold": threshold.get()
+    })
     print("Settings saved.")
 
 def update_border_color(person_count):
@@ -86,11 +83,13 @@ def update_border_color(person_count):
 def increase_threshold():
     threshold.set(threshold.get() + 1)
     threshold_label.config(text=f"Threshold: {threshold.get()}")
+    save_settings()  # Auto-save changes
 
 def decrease_threshold():
     if threshold.get() > 1:
         threshold.set(threshold.get() - 1)
         threshold_label.config(text=f"Threshold: {threshold.get()}")
+        save_settings()  # Auto-save changes
 
 def toggle_station_selection():
     station_selection_enabled.set(not station_selection_enabled.get())
@@ -358,7 +357,6 @@ video_label.bind("<Button-1>", record_click)
 
 # Initialization
 station_manager.load()
-load_settings()
 
 # Start video playback
 update_frame()

@@ -1,1 +1,5 @@
-{"people": true, "helmets": false, "vests": false}
+{
+  "helmets": false,
+  "vests": false,
+  "threshold": 7
+}
