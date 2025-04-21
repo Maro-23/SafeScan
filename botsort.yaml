@@ -1,0 +1,7 @@
+tracker_type: botsort # Must be lowercase
+track_high_thresh: 0.5 # Confidence threshold for new tracks
+track_low_thresh: 0.1 # Confidence threshold to keep existing tracks
+new_track_thresh: 0.6 # Threshold to confirm new tracks
+match_thresh: 0.8 # IoU threshold for matching
+track_buffer: 30 # Number of frames to buffer lost tracks
+frame_rate: 30 # Expected FPS (adjust to your video)

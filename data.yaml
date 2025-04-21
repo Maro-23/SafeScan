@@ -1,0 +1,13 @@
+train: ./dataset/train/images
+val: ./dataset/valid/images
+test: ./dataset/test/images
+
+nc: 5
+names: ["person", "helmet", "vest"]
+
+roboflow:
+  workspace: computer-vision
+  project: worker-safety
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/computer-vision/worker-safety/dataset/1
