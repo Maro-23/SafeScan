@@ -58,6 +58,15 @@ tracking_history = {}
 history_window = None
 history_table = None
 
+# Email init
+from services.email import EmailService
+# Initialize email service (put with other backend variables)
+email_service = EmailService(
+    sender="marwanhatem1234@gmail.com",
+    receiver="marwanhatemalt1234@gmail.com",
+    password="fgmyjbnplmmtcanv"
+)
+
 # Drawing variables
 from services.stations import StationManager
 station_manager = StationManager()
@@ -255,42 +264,24 @@ def update_history_table():
             ))
 
 def send_alert_email():
-    def _send_email_thread():
-        email_status_label.config(text="Sending email...", fg="blue")
-        root.update()
-
-        sender_email = "marwanhatem1234@gmail.com"
-        receiver_email = "marwanhatemalt1234@gmail.com"
-        password = "fgmyjbnplmmtcanv"
-
-        subject = "Safety Alert: Person Detected"
-        body = "Alert!\n\nPerson detected in monitored area.\n\nSafeScan Monitoring System"
-
+    def _send_thread():
         try:
-            msg = EmailMessage()
-            msg.set_content(body)
-            msg["Subject"] = subject
-            msg["From"] = sender_email
-            msg["To"] = receiver_email
-
-            context = ssl.create_default_context()
+            email_status_label.config(text="Sending email...", fg="blue")
+            email_status_label.update_idletasks()  # Force UI update
             
-            with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context, timeout=10) as server:
-                server.login(sender_email, password)
-                server.send_message(msg)
+            success, message = email_service.send_alert(
+                subject="Safety Alert: Person Detected",
+                body="Alert!\n\nPerson detected in monitored area.\n\nSafeScan Monitoring System"
+            )
+            print(f"Email result - {success}")  # <-- ADD THIS
             
-            email_status_label.config(text="Email sent!", fg="green")
-            print("Email sent successfully!")
-            
+            email_status_label.config(text=message, fg="green" if success else "red")
         except Exception as e:
-            email_status_label.config(text="Failed to send", fg="red")
-            print(f"Failed to send email: {e}")
-            
+            print(f"Error in thread: {str(e)}")  # <-- ADD THIS
         finally:
             root.after(3000, lambda: email_status_label.config(text=""))
-
-    email_thread = threading.Thread(target=_send_email_thread, daemon=True)
-    email_thread.start()
+    
+    threading.Thread(target=_send_thread, daemon=True).start()
 
 def update_frame():
     global frame_counter, last_detection_result, last_person_count, last_people_boxes, last_person_ids
@@ -455,13 +446,31 @@ scrollbar.pack(side="right", fill="y")
 station_display.config(yscrollcommand=scrollbar.set)
 scrollbar.config(command=station_display.yview)
 
-# Email button at bottom
-email_button = tk.Button(info_section, text="🚨 Send Alert",
-                        command=send_alert_email, width=22, font=font_style, bg="#ff9999")
-email_button.pack(side="bottom", pady=10)
+# Email Alert Section
+# Create a container frame for the button and label
+control_row = tk.Frame(info_section)
+control_row.pack(side="bottom", pady=10, fill="x")
 
-email_status_label = tk.Label(info_section, text="", font=font_style)
-email_status_label.pack(side="bottom", pady=5)
+# Place button on the LEFT
+email_button = tk.Button(
+    control_row,  # Changed parent to control_row
+    text="🚨 Send Alert",
+    command=send_alert_email,
+    width=15,
+    font=font_style,
+    bg="#ff9999"
+)
+email_button.pack(side="left")
+
+# Place label on the RIGHT
+email_status_label = tk.Label(
+    control_row,  # Changed parent to control_row
+    font=font_style,
+    fg="black",
+    bg="#f0f0f0",  # Light gray background
+    padx=10
+)
+email_status_label.pack(side="right")
 
 # Event binding
 video_label.bind("<Button-1>", record_click)
