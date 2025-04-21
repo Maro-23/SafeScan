@@ -52,3 +52,22 @@ class PeopleTracker:
           tid: data for tid, data in self.history.items()
           if current_time - data['last_seen'] <= 300
       }
+    
+    def get_history_table_data(self):
+      """Returns formatted data for history table"""
+      current_time = time.time()
+      table_data = []
+      
+      for track_id, data in self.history.items():
+          current_station_time = current_time - data['last_update'] if data['current_station'] else 0
+          total_station_time = sum(t for _, t in data['station_history']) + current_station_time
+          display_station_time = min(total_station_time, data['total_time'])
+          
+          table_data.append((
+              track_id,
+              f"{data['total_time']:.1f}s",
+              data['current_station'] or "None",
+              f"{display_station_time:.1f}s" if data['current_station'] else "N/A"
+          ))
+      
+      return table_data

@@ -58,10 +58,6 @@ last_person_ids = []
 
 # Tracking history variables
 tracker = PeopleTracker()
-history_window = None
-history_table = None
-
-
 
 # Drawing variables
 station_manager = StationManager()
@@ -120,60 +116,36 @@ def record_click(event):
         station_manager.rectangle_start = None  # Reset
 
 def show_history_window():
-    global history_window, history_table
+    history_window = tk.Toplevel(root)
+    history_window.title("Tracking History")
+    history_window.geometry("800x600")
     
-    if history_window is None or not history_window.winfo_exists():
-        history_window = tk.Toplevel(root)
-        history_window.title("Tracking History")
-        history_window.geometry("800x600")
-        
-        # Create table
-        columns = ("ID", "Total Time", "Current Station", "Time in Station")
-        history_table = ttk.Treeview(history_window, columns=columns, show="headings")
-        
-        for col in columns:
-            history_table.heading(col, text=col)
-            history_table.column(col, width=150, anchor="center")
-        
-        history_table.pack(fill="both", expand=True)
-        
-        # Add scrollbar
-        scrollbar = ttk.Scrollbar(history_window, orient="vertical", command=history_table.yview)
-        scrollbar.pack(side="right", fill="y")
-        history_table.configure(yscrollcommand=scrollbar.set)
-        
-        # Add refresh button
-        refresh_button = tk.Button(history_window, text="Refresh", command=update_history_table)
-        refresh_button.pack(pady=10)
-        
-        # Update table initially
-        update_history_table()
-    else:
-        history_window.lift()
-
-def update_history_table():
-    if history_table:
+    # Create table
+    columns = ("ID", "Total Time", "Current Station", "Time in Station")
+    history_table = ttk.Treeview(history_window, columns=columns, show="headings")
+    
+    for col in columns:
+        history_table.heading(col, text=col)
+        history_table.column(col, width=150, anchor="center")
+    
+    history_table.pack(fill="both", expand=True)
+    
+    # Add scrollbar
+    scrollbar = ttk.Scrollbar(history_window, orient="vertical", command=history_table.yview)
+    scrollbar.pack(side="right", fill="y")
+    history_table.configure(yscrollcommand=scrollbar.set)
+    
+    # Refresh button
+    def refresh_table():
         history_table.delete(*history_table.get_children())
-        current_time = time.time()
-        
-        for track_id, data in tracker.history.items():
-            # Calculate CURRENT station time (not yet recorded in history)
-            current_station_time = 0
-            if data['current_station']:
-                current_station_time = current_time - data['last_update']
-            
-            # Sum all time spent in current + previous stations
-            total_station_time = sum(t for _, t in data['station_history']) + current_station_time
-            
-            # Ensure never exceeds total_time
-            display_station_time = min(total_station_time, data['total_time'])
-            
-            history_table.insert("", "end", values=(
-                track_id,
-                f"{data['total_time']:.1f}s",
-                data['current_station'] or "None",
-                f"{display_station_time:.1f}s" if data['current_station'] else "N/A"
-            ))
+        for row in tracker.get_history_table_data():
+            history_table.insert("", "end", values=row)
+    
+    refresh_btn = tk.Button(history_window, text="Refresh", command=refresh_table)
+    refresh_btn.pack(pady=10)
+    
+    # Initial data load
+    refresh_table()
             
 def update_frame():
     global frame_counter, last_detection_result, last_person_count, last_people_boxes, last_person_ids
