@@ -61,12 +61,7 @@ tracker = PeopleTracker()
 history_window = None
 history_table = None
 
-# Email init
-email_service = EmailService(
-    sender="marwanhatem1234@gmail.com",
-    receiver="marwanhatemalt1234@gmail.com",
-    password="fgmyjbnplmmtcanv"
-)
+
 
 # Drawing variables
 station_manager = StationManager()
@@ -124,31 +119,6 @@ def record_click(event):
         station_manager.add_station(station_manager.rectangle_start, rectangle_end)
         station_manager.rectangle_start = None  # Reset
 
-def update_station_people_count():
-    global last_people_boxes
-    if station_manager.rectangles:
-        station_counts = [0] * len(station_manager.rectangles)
-        for (px, py) in last_people_boxes:
-            for i, ((x1, y1), (x2, y2)) in enumerate(station_manager.rectangles):
-                if x1 <= px <= x2 and y1 <= py <= y2:
-                    station_counts[i] += 1
-        
-        # Clear and update the text widget
-        station_display.config(state="normal")
-        station_display.delete(1.0, tk.END)
-        
-        # Format the station counts
-        for i in range(len(station_manager.rectangles)):
-            station_display.insert(tk.END, f"{station_manager.station_names[i]}: {station_counts[i]}\n")
-        
-        station_display.config(state="disabled")
-        station_display.see(tk.END)  # Auto-scroll to bottom
-    else:
-        station_display.config(state="normal")
-        station_display.delete(1.0, tk.END)
-        station_display.insert(tk.END, "Draw stations to begin tracking")
-        station_display.config(state="disabled")
-
 def show_history_window():
     global history_window, history_table
     
@@ -205,26 +175,6 @@ def update_history_table():
                 f"{display_station_time:.1f}s" if data['current_station'] else "N/A"
             ))
             
-def send_alert_email():
-    def _send_thread():
-        try:
-            email_status_label.config(text="Sending email...", fg="blue")
-            email_status_label.update_idletasks()  # Force UI update
-            
-            success, message = email_service.send_alert(
-                subject="Safety Alert: Person Detected",
-                body="Alert!\n\nPerson detected in monitored area.\n\nSafeScan Monitoring System"
-            )
-            print(f"Email result - {success}")  # <-- ADD THIS
-            
-            email_status_label.config(text=message, fg="green" if success else "red")
-        except Exception as e:
-            print(f"Error in thread: {str(e)}")  # <-- ADD THIS
-        finally:
-            root.after(3000, lambda: email_status_label.config(text=""))
-    
-    threading.Thread(target=_send_thread, daemon=True).start()
-
 def update_frame():
     global frame_counter, last_detection_result, last_person_count, last_people_boxes, last_person_ids
 
@@ -256,14 +206,15 @@ def update_frame():
             frame = last_detection_result if last_detection_result is not None else frame
 
         # Draw stations
-        for i, rect in enumerate(station_manager.rectangles):
-            (x1, y1), (x2, y2) = rect
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 255), 2)
-            cv2.putText(frame, station_manager.station_names[i], (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
-
+        frame = station_manager.draw_stations(frame)
+        
         people_count_label.config(text=f"👥 People Count: {last_person_count}")
         update_border_color(last_person_count)
-        update_station_people_count()
+        station_display_text = station_manager.get_station_counts_text(last_people_boxes)
+        station_display.config(state="normal")
+        station_display.delete(1.0, tk.END)
+        station_display.insert(tk.END, station_display_text)
+        station_display.config(state="disabled")
 
         img = Image.fromarray(frame)
         imgtk = ImageTk.PhotoImage(img)
@@ -402,7 +353,10 @@ control_row.pack(side="bottom", pady=10, fill="x")
 email_button = tk.Button(
     control_row,  # Changed parent to control_row
     text="🚨 Send Alert",
-    command=send_alert_email,
+    command=lambda: email_service.send_alert(
+        "Safety Alert: Person Detected",
+        "Alert!\n\nPerson detected in monitored area.\n\nSafeScan Monitoring System"
+    ),
     width=15,
     font=font_style,
     bg="#ff9999"
@@ -418,6 +372,14 @@ email_status_label = tk.Label(
     padx=10
 )
 email_status_label.pack(side="right")
+
+# Email init
+email_service = EmailService(
+    sender="marwanhatem1234@gmail.com",
+    receiver="marwanhatemalt1234@gmail.com",
+    password="fgmyjbnplmmtcanv",
+    status_label=email_status_label  # Pass the label for automatic updates
+)
 
 # Event binding
 video_label.bind("<Button-1>", record_click)
