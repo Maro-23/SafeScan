@@ -10,8 +10,9 @@ from services.email import EmailService
 from services.stations import StationManager
 from services.config import ConfigManager
 
+
 # Load video
-video_path = "sample_vid1.mp4"
+video_path = "sample_vid3.mp4"
 if not os.path.exists(video_path):
     print(f"Error: Video file '{video_path}' not found.")
     exit()
@@ -47,6 +48,7 @@ last_detection_result = None
 last_person_count = 0
 last_people_boxes = []
 last_person_ids = []
+TARGET_FPS = 15
 
 # Tracking history variables
 tracker = PeopleTracker()
@@ -193,7 +195,8 @@ def update_frame():
         video_label.image = imgtk
 
         frame_counter += 1
-        root.after(33, update_frame)  # ~30fps
+        frame_time_ms = int(1000 / TARGET_FPS)
+        root.after(frame_time_ms, update_frame)
     else:
         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
         update_frame()

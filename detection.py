@@ -28,7 +28,10 @@ def run_detection(frame, draw_person=True, draw_helmet=True, draw_vest=True):
         persist=True,
         tracker="bytetrack.yaml",
         conf=0.4,
-        verbose=False  # Disable logging for better performance
+        verbose=False, 
+        half = False,
+        device = "cpu"
+        # Disable logging for better performance
     )
     
     if results[0].boxes.id is not None:
