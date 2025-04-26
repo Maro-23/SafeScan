@@ -12,7 +12,7 @@ from services.config import ConfigManager
 
 
 # Load video
-video_path = "sample_vid3.mp4"
+video_path = "ppe_maro.mp4"
 if not os.path.exists(video_path):
     print(f"Error: Video file '{video_path}' not found.")
     exit()
