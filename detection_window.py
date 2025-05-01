@@ -9,6 +9,9 @@ from services.tracking import PeopleTracker
 from services.email import EmailService
 from services.stations import StationManager
 from services.config import ConfigManager
+from threading import Thread, Lock
+from queue import Queue
+import time
 
 
 # Load video
@@ -49,6 +52,12 @@ last_person_count = 0
 last_people_boxes = []
 last_person_ids = []
 TARGET_FPS = 15
+FRAME_SKIP = 3  # Must match detection.py's skip value
+MAX_QUEUE_SIZE = 2  # Number of frames to buffer
+frame_queue = Queue(maxsize=2)  # Small buffer to prevent memory buildup
+processing_lock = Lock()
+last_processed_frame = None
+processor_running = True
 
 # Tracking history variables
 tracker = PeopleTracker()
@@ -93,8 +102,18 @@ def decrease_threshold():
         threshold_label.config(text=f"Threshold: {threshold.get()}")
         save_settings()  # Auto-save changes
 
+def update_station_display():
+    station_display.config(state="normal")
+    station_display.delete(1.0, tk.END)
+    if station_manager.rectangles:
+        station_display.insert(tk.END, f"{len(station_manager.rectangles)} stations active")
+    else:
+        station_display.insert(tk.END, "Draw stations to begin tracking")
+    station_display.config(state="disabled")
+
 def toggle_station_selection():
     station_selection_enabled.set(not station_selection_enabled.get())
+    update_station_display()
     if station_selection_enabled.get():
         station_button.config(text="📌 Station Selection: ON", relief=tk.SUNKEN, bg="#cce5ff")
     else:
@@ -102,6 +121,7 @@ def toggle_station_selection():
 
 def remove_stations():
     station_manager.clear()
+    update_station_display()
     station_text.set("Draw stations to begin tracking")
     print("All stations removed")
 
@@ -147,59 +167,89 @@ def show_history_window():
     
     # Initial data load
     refresh_table()
+    
+def video_processing_thread():
+    global processor_running, last_processed_frame, last_people_boxes
+    
+    while processor_running:
+        try:
+            ret, frame = cap.read()
+            if not ret:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                continue
+                
+            # Basic frame processing
+            frame = cv2.resize(frame, (video_width, video_height))
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             
-def update_frame():
-    global frame_counter, last_detection_result, last_person_count, last_people_boxes, last_person_ids
-
-    ret, frame = cap.read()
-    if ret:
-        frame = cv2.resize(frame, (video_width, video_height))
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-        if frame_counter % 2 == 0:
-            frame, person_count, people_boxes, person_ids = detection.run_detection(
+            # Get detection results (will handle frame skipping internally)
+            processed_frame, person_count, people_boxes, person_ids = detection.run_detection(
                 frame,
-                draw_person=people_detect.get(),
-                draw_helmet=helmets_detect.get(),
-                draw_vest=vests_detect.get()
+                people_detect.get(),
+                helmets_detect.get(),
+                vests_detect.get()
             )
-            last_detection_result = frame.copy()
-            last_person_count = person_count
-            last_people_boxes = [(int((x1 + x2) / 2), int((y1 + y2) / 2)) for (x1, y1, x2, y2) in people_boxes]
-            last_person_ids = person_ids
             
-            # Update tracking history
+            # Update tracking data every frame (uses cached results when needed)
+            last_people_boxes = [(int((x1 + x2) // 2), int((y1 + y2) // 2)) 
+                               for (x1, y1, x2, y2) in people_boxes]
+            
             tracker.update(
                 last_people_boxes,
-                last_person_ids,
-                station_manager.rectangles,
+                person_ids,
+                [(start, end) for start, end in station_manager.rectangles],  # Ensure proper format
                 station_manager.station_names
             )
-        else:
-            frame = last_detection_result if last_detection_result is not None else frame
-
-        # Draw stations
-        frame = station_manager.draw_stations(frame)
-        
-        people_count_label.config(text=f"👥 People Count: {last_person_count}")
-        update_border_color(last_person_count)
-        station_display_text = station_manager.get_station_counts_text(last_people_boxes)
-        station_display.config(state="normal")
-        station_display.delete(1.0, tk.END)
-        station_display.insert(tk.END, station_display_text)
-        station_display.config(state="disabled")
-
-        img = Image.fromarray(frame)
-        imgtk = ImageTk.PhotoImage(img)
-        video_label.config(image=imgtk)
-        video_label.image = imgtk
-
-        frame_counter += 1
-        frame_time_ms = int(1000 / TARGET_FPS)
-        root.after(frame_time_ms, update_frame)
-    else:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-        update_frame()
+            
+            # Add stations to the frame
+            processed_frame = station_manager.draw_stations(processed_frame)
+            
+            # Update global variables
+            last_person_count = person_count
+            last_people_boxes = people_boxes
+            last_person_ids = person_ids
+            
+            # Put frame in queue if space available
+            if frame_queue.qsize() < 2:
+                frame_queue.put(processed_frame)
+                
+            # Small delay to prevent CPU hogging
+            time.sleep(0.01)
+            
+        except Exception as e:
+            print(f"Processing error: {str(e)}")
+            continue
+            
+def update_frame():
+    try:
+        if not frame_queue.empty():
+            frame = frame_queue.get_nowait()
+            
+            # Update video display
+            img = Image.fromarray(frame)
+            imgtk = ImageTk.PhotoImage(image=img)
+            video_label.imgtk = imgtk
+            video_label.config(image=imgtk)
+            
+            # Update station counts - Fixed version
+            if hasattr(station_manager, 'rectangles') and station_manager.rectangles:
+                # Convert bounding boxes to center points
+                people_positions = [(int((x1 + x2) // 2), int((y1 + y2) // 2)) 
+                                  for (x1, y1, x2, y2) in last_people_boxes]
+                counts_text = station_manager.get_station_counts_text(people_positions)
+            else:
+                counts_text = "Draw stations to begin tracking"
+                
+            station_display.config(state="normal")
+            station_display.delete(1.0, tk.END)
+            station_display.insert(tk.END, counts_text)
+            station_display.config(state="disabled")
+            
+    except Exception as e:
+        print(f"Display error: {str(e)}")
+    
+    finally:
+        root.after(int(1000/TARGET_FPS), update_frame)
 
 # Create main container frames
 left_panel = tk.Frame(root, width=220, padx=10, bg="#f0f0f0")
@@ -355,8 +405,30 @@ email_service = EmailService(
     status_label=email_status_label  # Pass the label for automatic updates
 )
 
+processor_running = True
+processing_thread = Thread(target=video_processing_thread, daemon=True)
+processing_thread.start()
+
+def cleanup():
+    global processor_running
+    
+    # Signal thread to stop
+    processor_running = False
+    
+    # Wait for thread to finish (with timeout)
+    if processing_thread.is_alive():
+        processing_thread.join(timeout=1.0)
+    
+    # Release video capture
+    cap.release()
+    
+    # Destroy window
+    root.destroy()
+
 # Event binding
 video_label.bind("<Button-1>", record_click)
+
+root.protocol("WM_DELETE_WINDOW", cleanup)
 
 # Initialization
 station_manager.load()
@@ -366,6 +438,3 @@ update_frame()
 
 # Run GUI
 root.mainloop()
-
-# Release video when window closes
-cap.release()

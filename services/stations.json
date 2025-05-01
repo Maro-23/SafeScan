@@ -1,4 +1,28 @@
 {
-  "rectangles": [],
-  "station_names": []
+  "rectangles": [
+    [
+      [
+        76,
+        32
+      ],
+      [
+        400,
+        276
+      ]
+    ],
+    [
+      [
+        443,
+        51
+      ],
+      [
+        604,
+        318
+      ]
+    ]
+  ],
+  "station_names": [
+    "Station 1",
+    "Station 2"
+  ]
 }
