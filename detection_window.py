@@ -13,7 +13,7 @@ from threading import Thread, Lock
 from queue import Queue
 import time
 
-
+"""
 # Load video
 video_path = "ppe_maro.mp4"
 if not os.path.exists(video_path):
@@ -21,16 +21,34 @@ if not os.path.exists(video_path):
     exit()
 
 cap = cv2.VideoCapture(video_path)
+"""
 
+cap = cv2.VideoCapture(0) 
+
+# Set desired resolution (optional)
+original_width = 1280  # Example resolution
+original_height = 720
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, original_width)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, original_height)
+
+# Verify webcam opened
 if not cap.isOpened():
-    print("Error: Could not open CCTV stream.")
+    print("Error: Could not open webcam.")
     exit()
 
+# Get actual resolution (may differ from requested)
+actual_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+actual_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+video_width = actual_width // 2
+video_height = actual_height // 2
+
+"""
 # Video dimensions
 original_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 original_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 video_width = original_width // 2
 video_height = original_height // 2
+"""
 
 # Window setup
 padding = 20
@@ -174,9 +192,11 @@ def video_processing_thread():
     while processor_running:
         try:
             ret, frame = cap.read()
+            """
             if not ret:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 continue
+            """
                 
             # Basic frame processing
             frame = cv2.resize(frame, (video_width, video_height))
