@@ -86,7 +86,13 @@ def draw_ppe_boxes(frame, boxes, class_ids, draw_helmet, draw_vest):
         )
 
 def run_detection(frame, draw_person=True, draw_helmet=True, draw_vest=True):
+    print("\n[DEBUG] Starting detection - Frame shape:", frame.shape)
     global detection_cache
+    # Initialize default return values
+    person_count = 0
+    person_boxes = []
+    person_ids = []
+    ppe_boxes_data = None
     
     # Only process every 3rd frame but use cached results for others
     if detection_cache['frame_count'] % 3 != 0:
@@ -94,20 +100,29 @@ def run_detection(frame, draw_person=True, draw_helmet=True, draw_vest=True):
         
         # Create fresh frame with cached detections
         output_frame = frame.copy()
-        person_count = draw_person_boxes(output_frame, detection_cache['person_boxes'], 
-                                       detection_cache['person_ids'], draw_person)
-        if detection_cache['ppe_boxes']:
-            draw_ppe_boxes(output_frame, detection_cache['ppe_boxes'][0], 
-                          detection_cache['ppe_boxes'][1], draw_helmet, draw_vest)
+        person_count = draw_person_boxes(output_frame, 
+                                      detection_cache['person_boxes'], 
+                                      detection_cache['person_ids'], 
+                                      draw_person)
         
-        return output_frame, person_count, detection_cache['person_boxes'], detection_cache['person_ids']
+        # Handle PPE drawing with cache
+        if detection_cache['ppe_boxes']:
+            draw_ppe_boxes(output_frame, 
+                         detection_cache['ppe_boxes'][0], 
+                         detection_cache['ppe_boxes'][1], 
+                         draw_helmet, 
+                         draw_vest)
+            ppe_boxes_data = detection_cache['ppe_boxes']
+        
+        return (
+            output_frame,
+            person_count,
+            detection_cache['person_boxes'],
+            detection_cache['person_ids'],
+            ppe_boxes_data
+        )
     
     # Actual processing for this frame
-    person_count = 0
-    person_boxes = []
-    person_ids = []
-    
-    # Run detections with torch.no_grad for better CPU performance
     with torch.no_grad():
         # Person detection with tracking
         person_results = person_model.track(
@@ -118,8 +133,8 @@ def run_detection(frame, draw_person=True, draw_helmet=True, draw_vest=True):
             classes=[0],  # 0 is person class in COCO
             verbose=False,
             device="cpu",
-            imgsz=320,  # Smaller image for faster processing
-            half=False   # Disable half precision on CPU
+            imgsz=320,
+            half=False
         )
         
         # PPE detection
@@ -140,19 +155,23 @@ def run_detection(frame, draw_person=True, draw_helmet=True, draw_vest=True):
         person_boxes = [box for box in boxes]
         person_ids = [tid for tid in track_ids]
         person_count = len(person_boxes)
+        print("[DEBUG] Person boxes:", len(person_boxes), "| IDs:", person_ids)
         
         # Draw person boxes
         draw_person_boxes(frame, person_boxes, person_ids, draw_person)
     
     # Process PPE detections
-    ppe_boxes_data = None
     if ppe_results[0].boxes is not None:
         boxes = ppe_results[0].boxes.xyxy.cpu().numpy().astype(int)
         class_ids = ppe_results[0].boxes.cls.cpu().numpy().astype(int)
         ppe_boxes_data = (boxes, class_ids)
+        print("[DEBUG] PPE boxes:", len(ppe_results[0].boxes), "| Classes:", ppe_results[0].boxes.cls.cpu().numpy())
         
         # Draw PPE boxes
         draw_ppe_boxes(frame, boxes, class_ids, draw_helmet, draw_vest)
+    else:
+        print("[DEBUG] No PPE boxes detected")
+
     
     # Update cache
     detection_cache = {
@@ -162,9 +181,18 @@ def run_detection(frame, draw_person=True, draw_helmet=True, draw_vest=True):
         'frame_count': detection_cache['frame_count'] + 1,
         'last_full_frame': frame.copy()
     }
-    
-    return frame, person_count, person_boxes, person_ids
 
+    print("[DEBUG] Returning - People:", person_count, 
+      "| PPE items:", ppe_boxes_data if ppe_boxes_data else 0)
+    
+    # Always return 5 values
+    return (
+        frame,          # Processed frame with drawings
+        person_count,   # Number of people detected
+        person_boxes,   # List of person bounding boxes
+        person_ids,     # List of tracking IDs
+        ppe_boxes_data  # Tuple of (ppe_boxes, ppe_classes) or None
+    )
 # Warm up models on startup
 def warmup_models():
     dummy_frame = torch.zeros((320, 320, 3), dtype=torch.uint8).numpy()

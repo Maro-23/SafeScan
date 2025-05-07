@@ -1,4 +1,5 @@
 {
+  "helmets": false,
   "vests": false,
-  "threshold": 7
+  "threshold": 3
 }

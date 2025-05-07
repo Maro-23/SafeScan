@@ -9,6 +9,7 @@ from services.tracking import PeopleTracker
 from services.email import EmailService
 from services.stations import StationManager
 from services.config import ConfigManager
+from services.violation import PPEViolationDetector
 from threading import Thread, Lock
 from queue import Queue
 import time
@@ -191,35 +192,59 @@ def video_processing_thread():
     
     while processor_running:
         try:
+            print(f"\n[THREAD] Frame processing iteration")
             ret, frame = cap.read()
-            """
             if not ret:
-                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                print("[THREAD] No frame captured")
                 continue
-            """
                 
-            # Basic frame processing
             frame = cv2.resize(frame, (video_width, video_height))
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             
-            # Get detection results (will handle frame skipping internally)
-            processed_frame, person_count, people_boxes, person_ids = detection.run_detection(
-                frame,
-                people_detect.get(),
-                helmets_detect.get(),
-                vests_detect.get()
-            )
-            
-            # Update tracking data every frame (uses cached results when needed)
+            # Get detection results - now properly handles all 5 return values
+            try:
+                processed_frame, person_count, people_boxes, person_ids, ppe_data = detection.run_detection(
+                    frame,
+                    people_detect.get(),
+                    helmets_detect.get(),
+                    vests_detect.get()
+                )
+            except ValueError as e:
+                print(f"Detection returned wrong number of values: {e}")
+                continue
+
+                
+            # Update tracking and violation detection
             last_people_boxes = [(int((x1 + x2) // 2), int((y1 + y2) // 2)) 
                                for (x1, y1, x2, y2) in people_boxes]
             
             tracker.update(
                 last_people_boxes,
                 person_ids,
-                [(start, end) for start, end in station_manager.rectangles],  # Ensure proper format
+                [(start, end) for start, end in station_manager.rectangles],
                 station_manager.station_names
             )
+            
+            # Check for PPE violations if detection is enabled
+            if people_detect.get() and (helmets_detect.get() or vests_detect.get()):
+                ppe_boxes = ppe_data[0] if ppe_data else None
+                ppe_classes = ppe_data[1] if ppe_data else None
+                
+                violation_detector.update(
+                    people_boxes,
+                    person_ids,
+                    ppe_boxes,
+                    ppe_classes,
+                    helmets_detect.get(),
+                    vests_detect.get()
+                )
+                
+                # Add visual indicators
+                processed_frame = violation_detector.draw_violation_indicators(
+                    processed_frame,
+                    people_boxes,
+                    person_ids
+                )
             
             # Add stations to the frame
             processed_frame = station_manager.draw_stations(processed_frame)
@@ -229,11 +254,9 @@ def video_processing_thread():
             last_people_boxes = people_boxes
             last_person_ids = person_ids
             
-            # Put frame in queue if space available
             if frame_queue.qsize() < 2:
                 frame_queue.put(processed_frame)
                 
-            # Small delay to prevent CPU hogging
             time.sleep(0.01)
             
         except Exception as e:
@@ -424,6 +447,9 @@ email_service = EmailService(
     password="fgmyjbnplmmtcanv",
     status_label=email_status_label  # Pass the label for automatic updates
 )
+
+# PPE Violation Detector
+violation_detector = PPEViolationDetector(email_service)
 
 processor_running = True
 processing_thread = Thread(target=video_processing_thread, daemon=True)
