@@ -109,11 +109,10 @@ class PPEViolationDetector:
                     if violations:
                         x1, y1, x2, y2 = person_boxes[i]
                         # Draw warning background
-                        cv2.rectangle(frame, (x1, y1), (x2, y1+30), (0, 0, 255), -1)
                         # Draw violation text
                         text = " | ".join(violations)
                         cv2.putText(frame, text, (x1, y1+20), 
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 0), 4, cv2.LINE_AA)
                         cv2.putText(frame, text, (x1, y1+20), 
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 2, cv2.LINE_AA)
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (206, 32, 41), 2, cv2.LINE_AA)
         return frame

@@ -86,7 +86,6 @@ def draw_ppe_boxes(frame, boxes, class_ids, draw_helmet, draw_vest):
         )
 
 def run_detection(frame, draw_person=True, draw_helmet=True, draw_vest=True):
-    print("\n[DEBUG] Starting detection - Frame shape:", frame.shape)
     global detection_cache
     # Initialize default return values
     person_count = 0
@@ -155,7 +154,6 @@ def run_detection(frame, draw_person=True, draw_helmet=True, draw_vest=True):
         person_boxes = [box for box in boxes]
         person_ids = [tid for tid in track_ids]
         person_count = len(person_boxes)
-        print("[DEBUG] Person boxes:", len(person_boxes), "| IDs:", person_ids)
         
         # Draw person boxes
         draw_person_boxes(frame, person_boxes, person_ids, draw_person)
@@ -164,14 +162,9 @@ def run_detection(frame, draw_person=True, draw_helmet=True, draw_vest=True):
     if ppe_results[0].boxes is not None:
         boxes = ppe_results[0].boxes.xyxy.cpu().numpy().astype(int)
         class_ids = ppe_results[0].boxes.cls.cpu().numpy().astype(int)
-        ppe_boxes_data = (boxes, class_ids)
-        print("[DEBUG] PPE boxes:", len(ppe_results[0].boxes), "| Classes:", ppe_results[0].boxes.cls.cpu().numpy())
-        
+        ppe_boxes_data = (boxes, class_ids)        
         # Draw PPE boxes
         draw_ppe_boxes(frame, boxes, class_ids, draw_helmet, draw_vest)
-    else:
-        print("[DEBUG] No PPE boxes detected")
-
     
     # Update cache
     detection_cache = {
@@ -180,11 +173,7 @@ def run_detection(frame, draw_person=True, draw_helmet=True, draw_vest=True):
         'ppe_boxes': ppe_boxes_data,
         'frame_count': detection_cache['frame_count'] + 1,
         'last_full_frame': frame.copy()
-    }
-
-    print("[DEBUG] Returning - People:", person_count, 
-      "| PPE items:", ppe_boxes_data if ppe_boxes_data else 0)
-    
+    }   
     # Always return 5 values
     return (
         frame,          # Processed frame with drawings

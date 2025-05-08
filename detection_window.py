@@ -2,8 +2,6 @@ import cv2
 import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk
-import os
-import json
 import detection
 from services.tracking import PeopleTracker
 from services.email import EmailService
@@ -14,17 +12,7 @@ from threading import Thread, Lock
 from queue import Queue
 import time
 
-"""
-# Load video
-video_path = "ppe_maro.mp4"
-if not os.path.exists(video_path):
-    print(f"Error: Video file '{video_path}' not found.")
-    exit()
-
-cap = cv2.VideoCapture(video_path)
-"""
-
-cap = cv2.VideoCapture(0) 
+cap = cv2.VideoCapture(1) 
 
 # Set desired resolution (optional)
 original_width = 1280  # Example resolution
@@ -40,8 +28,8 @@ if not cap.isOpened():
 # Get actual resolution (may differ from requested)
 actual_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 actual_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-video_width = actual_width // 2
-video_height = actual_height // 2
+video_width = int(actual_width // 1.2)
+video_height = int(actual_height // 1.2)
 
 """
 # Video dimensions
@@ -58,9 +46,10 @@ window_height = video_height + 250  # Increased height for better station displa
 
 # Tkinter init
 root = tk.Tk()
-root.title("SafeScan Detection System")
+root.title("SafeScan")
 root.geometry(f"{window_width}x{window_height}")
 root.minsize(window_width, window_height)  # Prevent window from shrinking
+root.state('zoomed')
 
 # Backend variables
 font_style = ("Arial", 10)
@@ -93,7 +82,6 @@ settings = config.load()
 people_detect = tk.BooleanVar(value=settings["people"])
 helmets_detect = tk.BooleanVar(value=settings["helmets"])
 vests_detect = tk.BooleanVar(value=settings["vests"])
-threshold = tk.IntVar(value=settings["threshold"])
 
 # Function definitions
 
@@ -102,24 +90,8 @@ def save_settings():
         "people": people_detect.get(),
         "helmets": helmets_detect.get(),
         "vests": vests_detect.get(),
-        "threshold": threshold.get()
     })
     print("Settings saved.")
-
-def update_border_color(person_count):
-    color = "red" if person_count >= threshold.get() else "blue"
-    border_frame.config(bg=color, highlightbackground=color)
-
-def increase_threshold():
-    threshold.set(threshold.get() + 1)
-    threshold_label.config(text=f"Threshold: {threshold.get()}")
-    save_settings()  # Auto-save changes
-
-def decrease_threshold():
-    if threshold.get() > 1:
-        threshold.set(threshold.get() - 1)
-        threshold_label.config(text=f"Threshold: {threshold.get()}")
-        save_settings()  # Auto-save changes
 
 def update_station_display():
     station_display.config(state="normal")
@@ -192,10 +164,8 @@ def video_processing_thread():
     
     while processor_running:
         try:
-            print(f"\n[THREAD] Frame processing iteration")
             ret, frame = cap.read()
             if not ret:
-                print("[THREAD] No frame captured")
                 continue
                 
             frame = cv2.resize(frame, (video_width, video_height))
@@ -273,6 +243,7 @@ def update_frame():
             imgtk = ImageTk.PhotoImage(image=img)
             video_label.imgtk = imgtk
             video_label.config(image=imgtk)
+            people_count_label.config(text=f"👥 People Count: {len(last_people_boxes)}")
             
             # Update station counts - Fixed version
             if hasattr(station_manager, 'rectangles') and station_manager.rectangles:
@@ -367,22 +338,6 @@ vests_checkbox = tk.Checkbutton(settings_section, text="🦺 Detect Vests",
                                variable=vests_detect, command=save_settings,
                                font=font_style, bg="#f0f0f0", anchor="w")
 vests_checkbox.pack(fill="x", pady=2)
-
-# UI Elements - Threshold Section
-threshold_label = tk.Label(threshold_section, text=f"Threshold: {threshold.get()}",
-                          font=font_style, bg="#f0f0f0")
-threshold_label.pack(pady=5)
-
-threshold_buttons = tk.Frame(threshold_section, bg="#f0f0f0")
-threshold_buttons.pack()
-
-decrease_button = tk.Button(threshold_buttons, text="-", command=decrease_threshold,
-                           width=3, font=font_style, bg="#e1e1e1")
-decrease_button.pack(side="left", padx=5)
-
-increase_button = tk.Button(threshold_buttons, text="+", command=increase_threshold,
-                           width=3, font=font_style, bg="#e1e1e1")
-increase_button.pack(side="left", padx=5)
 
 # UI Elements - Info Section
 people_count_label = tk.Label(info_section, text="👥 People Count: 0",

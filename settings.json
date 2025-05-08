@@ -1,5 +1,3 @@
 {
-  "helmets": false,
-  "vests": false,
-  "threshold": 3
+  "threshold": 1
 }
