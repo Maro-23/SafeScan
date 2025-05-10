@@ -8,8 +8,9 @@ class PPEViolationDetector:
         self.email_service = email_service
         self.violation_timers = {}  # {track_id: {'helmet': timer, 'vest': timer}}
         self.lock = Lock()
-        self.detection_threshold = 3  # Seconds of continuous violation before email
+        self.detection_threshold = 10  # Seconds of continuous violation before email
         self.check_interval = 1.0  # How often to check for violations
+        self.sent_alerts = set()  # Track IDs we've already alerted for  # <-- NEW
         
     def update(self, person_boxes, person_ids, ppe_boxes, ppe_classes, check_helmet=True, check_vest=True):
         """Update detection with current frame data"""
@@ -31,8 +32,6 @@ class PPEViolationDetector:
                 has_vest = False
                 
                 # Check if person has required PPE
-                print(ppe_boxes)
-                print(ppe_classes)
                 if len(ppe_boxes) >= 1:
                     for i, ppe_box in enumerate(ppe_boxes):
                         if self._boxes_overlap(person_box, ppe_box):
@@ -75,7 +74,9 @@ class PPEViolationDetector:
         if timer['start'] is None:
             timer['start'] = current_time
         elif not timer['reported'] and current_time - timer['start'] >= self.detection_threshold:
-            self._send_violation_alert(track_id, ppe_type)
+            if track_id not in self.sent_alerts:  # <-- NEW CHECK
+                self._send_violation_alert(track_id, ppe_type)
+                self.sent_alerts.add(track_id)  # <-- REMEMBER WE SENT IT
             timer['reported'] = True
     
     def _reset_violation_timer(self, track_id, ppe_type):

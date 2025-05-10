@@ -18,7 +18,7 @@ ppe_class_names = data_yaml["names"]
 
 # Colors for detection
 class_colors = {
-    "Safety-Helmet": (0, 255, 0),      # Green
+    "Safety-Helmet": (0, 0, 255),      # Green
     "Reflective-Jacket": (255, 0, 0),  # Red
     "person": (1, 255, 31)            # Blue
 }

@@ -8,8 +8,7 @@ class ConfigManager:
         self.defaults = {
             "people": True,
             "helmets": True,
-            "vests": True,
-            "threshold": 5
+            "vests": True
         }
 
     def load(self) -> Dict[str, Any]:

@@ -28,16 +28,8 @@ if not cap.isOpened():
 # Get actual resolution (may differ from requested)
 actual_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 actual_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-video_width = int(actual_width // 1.2)
-video_height = int(actual_height // 1.2)
-
-"""
-# Video dimensions
-original_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-original_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-video_width = original_width // 2
-video_height = original_height // 2
-"""
+video_width = int(actual_width)
+video_height = int(actual_height)
 
 # Window setup
 padding = 20
@@ -82,6 +74,8 @@ settings = config.load()
 people_detect = tk.BooleanVar(value=settings["people"])
 helmets_detect = tk.BooleanVar(value=settings["helmets"])
 vests_detect = tk.BooleanVar(value=settings["vests"])
+critical_var = tk.BooleanVar(value=False)
+
 
 # Function definitions
 
@@ -220,10 +214,8 @@ def video_processing_thread():
             processed_frame = station_manager.draw_stations(processed_frame)
             
             # Update global variables
-            last_person_count = person_count
             last_people_boxes = people_boxes
-            last_person_ids = person_ids
-            
+                        
             if frame_queue.qsize() < 2:
                 frame_queue.put(processed_frame)
                 
@@ -245,6 +237,30 @@ def update_frame():
             video_label.config(image=imgtk)
             people_count_label.config(text=f"👥 People Count: {len(last_people_boxes)}")
             
+            # Critical operation logic
+            if critical_var.get():  # Only if checkbox is checked
+                if len(last_people_boxes) > 0:
+                    border_frame.config(
+                        highlightbackground="red",
+                        highlightthickness=4,  # Thicker border
+                        bg="red"
+                    )
+                    critical_warning.config(text="WARNING: PERSON DETECTED!")
+                else:
+                    border_frame.config(
+                        highlightbackground="blue",
+                        highlightthickness=2,  # Normal thickness
+                        bg="blue"
+                    )
+                    critical_warning.config(text="")
+            else:  # If checkbox isn't checked
+                critical_warning.config(text="")
+                border_frame.config(
+                    highlightbackground="blue",
+                    highlightthickness=2,
+                    bg="blue"
+                )
+            
             # Update station counts - Fixed version
             if hasattr(station_manager, 'rectangles') and station_manager.rectangles:
                 # Convert bounding boxes to center points
@@ -258,15 +274,13 @@ def update_frame():
             station_display.delete(1.0, tk.END)
             station_display.insert(tk.END, counts_text)
             station_display.config(state="disabled")
-            
-    except Exception as e:
-        print(f"Display error: {str(e)}")
+
     
     finally:
         root.after(int(1000/TARGET_FPS), update_frame)
 
 # Create main container frames
-left_panel = tk.Frame(root, width=220, padx=10, bg="#f0f0f0")
+left_panel = tk.Frame(root, width=150, padx=10, bg="#f0f0f0")
 left_panel.pack(side="left", fill="y", expand=False)
 
 right_panel = tk.Frame(root)
@@ -295,32 +309,34 @@ settings_section = tk.LabelFrame(left_panel, text="⚙️ Detection Settings", f
                                padx=5, pady=5, bg="#f0f0f0")
 settings_section.pack(fill="x", pady=5)
 
-threshold_section = tk.LabelFrame(left_panel, text="🔔 Alert Threshold", font=("Arial", 10, "bold"),
-                                padx=5, pady=5, bg="#f0f0f0")
-threshold_section.pack(fill="x", pady=5)
+critical_section = tk.LabelFrame(left_panel, text="⚠️ Critical Operation", font=("Arial", 10, "bold"),
+                               padx=5, pady=5, bg="#f0f0f0")
+critical_section.pack(fill="x", pady=5)
 
-# Info section in right panel
-info_section = tk.LabelFrame(right_panel, text="📊 Live Information", font=("Arial", 10, "bold"),
-                            padx=10, pady=10)
-info_section.pack_propagate(False)
-info_section.pack(fill="both", expand=True, padx=10, pady=10)
+station_display_section = tk.LabelFrame(left_panel, text="📋 Station Status", font=("Arial", 10, "bold"),
+                                padx=5, pady=5, bg="#f0f0f0")
+station_display_section.pack(fill="x", expand=True, pady=5)  # Fill available space
+
+email_section = tk.LabelFrame(left_panel, text="📧 Email Alerts", font=("Arial", 10, "bold"),
+                            padx=5, pady=5, bg="#f0f0f0")
+email_section.pack(fill="x", pady=5)
 
 # UI Elements - Controls Section
 station_button = tk.Button(control_section, text="📌 Station Selection: OFF",
                           command=toggle_station_selection,
-                          width=22, font=font_style, bg="#e1e1e1")
+                          width=0, font=font_style, bg="#e1e1e1")
 station_button.pack(fill="x", pady=2)
 
 remove_button = tk.Button(control_section, text="❌ Remove Stations",
-                         command=remove_stations, width=22, font=font_style, bg="#ffcccc")
+                         command=remove_stations, width=0, font=font_style, bg="#ffcccc")
 remove_button.pack(fill="x", pady=2)
 
 save_button = tk.Button(control_section, text="💾 Save Stations",
-                       command=station_manager.save, width=22, font=font_style, bg="#ccffcc")
+                       command=station_manager.save, width=0, font=font_style, bg="#ccffcc")
 save_button.pack(fill="x", pady=2)
 
 history_button = tk.Button(control_section, text="📜 View History",
-                          command=show_history_window, width=22, font=font_style, bg="#cce5ff")
+                          command=show_history_window, width=0, font=font_style, bg="#cce5ff")
 history_button.pack(fill="x", pady=2)
 
 # UI Elements - Settings Section
@@ -339,25 +355,43 @@ vests_checkbox = tk.Checkbutton(settings_section, text="🦺 Detect Vests",
                                font=font_style, bg="#f0f0f0", anchor="w")
 vests_checkbox.pack(fill="x", pady=2)
 
-# UI Elements - Info Section
-people_count_label = tk.Label(info_section, text="👥 People Count: 0",
-                             font=("Arial", 12, "bold"))
-people_count_label.pack(pady=5)
+# Critical operation checkbox
+critical_checkbox = tk.Checkbutton(critical_section, text="Enable Critical Monitoring",
+                                 variable=critical_var,
+                                 font=font_style, bg="#f0f0f0", anchor="w")
+critical_checkbox.pack(fill="x", pady=2)
+
+# Warning label (initially empty)
+critical_warning = tk.Label(critical_section, text="",
+                           font=font_style, fg="red", bg="#f0f0f0",wraplength="140")
+critical_warning.pack(fill="x", pady=2)
 
 # Station display with scrollable text widget
 station_text = tk.StringVar()
 station_text.set("Draw stations to begin tracking")
 
-# Create a frame for the station display with fixed height
-station_display_frame = tk.Frame(info_section, height=100,  # Fixed height
-                               bg="white", relief="sunken", borderwidth=2)
-station_display_frame.pack(fill="x", pady=5)  # Only fill horizontally
+people_count_frame = tk.Frame(left_panel, bg="#f0f0f0")
+people_count_frame.pack(fill="x", pady=(0, 5))  # Small bottom padding
 
-# Text widget for stations display
-station_display = tk.Text(station_display_frame, wrap=tk.WORD, 
-                         font=font_style, bg="white", fg="black",
-                         height=4,  # Show 4 lines max
-                         padx=5, pady=5)
+people_count_label = tk.Label(people_count_frame, 
+                            text="👥 People Count: 0", 
+                            font=("Arial", 12, "bold"),
+                            bg="#f0f0f0")
+people_count_label.pack(side="left", padx=5)
+
+# Create a frame for the station display with fixed height
+station_display_frame = tk.Frame(station_display_section, bg="white", relief="sunken", borderwidth=2, width = 150)
+station_display_frame.pack(fill="both", expand=True)
+
+station_display = tk.Text(station_display_frame, 
+                        wrap=tk.WORD, 
+                        font=font_style, 
+                        bg="white", 
+                        fg="black",
+                        width = 30,
+                        height = 8,
+                        padx=5, 
+                        pady=5)
 station_display.pack(side="left", fill="both", expand=True)
 
 # Add scrollbar
@@ -366,34 +400,17 @@ scrollbar.pack(side="right", fill="y")
 station_display.config(yscrollcommand=scrollbar.set)
 scrollbar.config(command=station_display.yview)
 
-# Email Alert Section
-# Create a container frame for the button and label
-control_row = tk.Frame(info_section)
-control_row.pack(side="bottom", pady=10, fill="x")
-
-# Place button on the LEFT
-email_button = tk.Button(
-    control_row,  # Changed parent to control_row
-    text="🚨 Send Alert",
-    command=lambda: email_service.send_alert(
-        "Safety Alert: Person Detected",
-        "Alert!\n\nPerson detected in monitored area.\n\nSafeScan Monitoring System"
-    ),
-    width=15,
-    font=font_style,
-    bg="#ff9999"
-)
-email_button.pack(side="left")
-
-# Place label on the RIGHT
 email_status_label = tk.Label(
-    control_row,  # Changed parent to control_row
+    email_section,
+    text="",  # Initial empty text
     font=font_style,
     fg="black",
-    bg="#f0f0f0",  # Light gray background
-    padx=10
+    bg="#f0f0f0",
+    wraplength=280,  # Match station display width
+    anchor="w",
+    justify="left"
 )
-email_status_label.pack(side="right")
+email_status_label.pack(fill="x", padx=5, pady=2)
 
 # Email init
 email_service = EmailService(
